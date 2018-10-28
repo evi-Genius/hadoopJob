@@ -1,6 +1,7 @@
 package computer;
 
 import java.io.IOException;
+import java.text.NumberFormat;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -31,27 +32,31 @@ public class computer {
 				throws IOException, InterruptedException {
 			// TODO Auto-generated method stub
 			String[] line = value.toString().split("\t");
-			word.set(line[2]);
+			word.set(line[5]);
+//			System.out.println(word.toString()+" 1");
 			context.write(word, one);
 		}
 	}
 
-	public static class hdpReduce extends Reducer<Text, IntWritable, Text, IntWritable> {
+	public static class hdpReduce extends Reducer<Text, IntWritable, Text, Text> {
 
 		Map<String, Integer> map = new HashMap<String, Integer>();
+		float numPair=0;
+		
 		@Override
 		protected void reduce(Text key, Iterable<IntWritable> values,
-				Reducer<Text, IntWritable, Text, IntWritable>.Context context)
+				Reducer<Text, IntWritable, Text, Text>.Context context)
 				throws IOException, InterruptedException {
 			int sum = 0;
 			for (IntWritable i : values)
 				sum += i.get();
 			String name = key.toString();
+			numPair++;
 			map.put(name, sum);
 		}
 		
 		@Override
-		protected void cleanup(Reducer<Text, IntWritable, Text, IntWritable>.Context context)
+		protected void cleanup(Reducer<Text, IntWritable, Text, Text>.Context context)
 				throws IOException, InterruptedException {
 			// 这里将map.entrySet()转换成list
 			List<Map.Entry<String, Integer>> list = new LinkedList<Map.Entry<String, Integer>>(map.entrySet());
@@ -63,9 +68,12 @@ public class computer {
 					return (int) (arg1.getValue() - arg0.getValue());
 				}
 			});
-			for (int i = 0; i < 30; i++) {
-				context.write(new Text(list.get(i).getKey()), new IntWritable(list.get(i).getValue()));
-				System.out.println("key="+list.get(i).getKey()+"value="+list.get(i).getValue());
+			NumberFormat format = NumberFormat.getPercentInstance();
+	        format.setMaximumFractionDigits(2);//设置保留几位小数
+			for (int i = 0; i < 10; i++) {
+				double ration=list.get(i).getValue()/numPair;
+				context.write(new Text(list.get(i).getKey()), new Text(list.get(i).getValue().toString()+":"+format.format(ration).toString()+"%"));
+//				System.out.println("key="+list.get(i).getKey()+"value="+list.get(i).getValue());
 			}
 		}
 	}
@@ -80,10 +88,14 @@ public class computer {
 			Job job = Job.getInstance(conf, "computer");
 			job.setJarByClass(computer.class);//1
 			job.setMapperClass(hdpMap.class);
-//			job.setCombinerClass(hdpReduce.class);
 			job.setReducerClass(hdpReduce.class);
+			
+			job.setMapOutputKeyClass(Text.class);
+			job.setMapOutputValueClass(IntWritable.class);
 			job.setOutputKeyClass(Text.class);
-			job.setOutputValueClass(IntWritable.class);
+			job.setOutputValueClass(Text.class);
+			
+			
 			FileInputFormat.addInputPath(job, new Path(otherArgs[0]));
 			FileOutputFormat.setOutputPath(job, new Path(otherArgs[1]));
 			// waitForCompletion()方法用来提交作业并等待执行完成
